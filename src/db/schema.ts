@@ -26,7 +26,8 @@ export const callTypeEnum = pgEnum("call_type", [
 
 export const discussionForEnum = pgEnum("discussion_for", [
   "DTH",
-  "Internet",
+  "Internet Broadband",
+  "Internet Leased Line",
   "TollFree Service",
   "SIP Trunk",
   "Any Other",
@@ -110,6 +111,7 @@ export const leads = pgTable("leads", {
   callTemperature: callTemperatureEnum("call_temperature"),
   nextFollowUpDate: date("next_follow_up_date"),
   finalRemarks: text("final_remarks"),
+  photoUrls: text("photo_urls").array(),
 
   // ── Timestamps ────────────────────────────
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -19,10 +19,12 @@ import {
   Trash2Icon,
   TargetIcon,
   CalendarIcon,
+  EyeIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useUser } from "@clerk/nextjs";
 import { isAdmin } from "@/lib/isAdmis";
+import Link from "next/link";
 
 type LeadRecord = {
   lead: {
@@ -184,6 +186,17 @@ export default function AdminLeads() {
                       </div>
                     </div>
                     <div className="flex sm:flex-col gap-2 justify-end shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-2 justify-start"
+                        asChild
+                      >
+                        <Link href={`/admin/leads/${row.lead.id}`}>
+                          <EyeIcon className="h-3 w-3 text-blue-400 hover:text-blue-300" />{" "}
+                          View
+                        </Link>
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
       callTemperature,
       nextFollowUpDate,
       finalRemarks,
+      photoUrls,
     } = body;
 
     // 2. Check required fields from the frontend
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
         callTemperature,
         nextFollowUpDate,
         finalRemarks,
+        photoUrls: photoUrls || [],
       })
       .returning();
 

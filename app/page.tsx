@@ -58,6 +58,9 @@ import {
   BriefcaseIcon,
   Trash2Icon,
   UsersIcon,
+  ImageIcon,
+  UploadCloudIcon,
+  XIcon,
 } from "lucide-react";
 import Navbar from "./_components/Navbar";
 import {
@@ -67,6 +70,12 @@ import {
   serviceProviderEnum,
   orgSegmentEnum,
 } from "@/src/db/schema";
+import { createClient } from "@supabase/supabase-js";
+
+// Initialize Supabase client for storage
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -119,6 +128,7 @@ interface LeadForm {
   callTemperature: CallTemperature | "";
   nextFollowUpDate: Date | undefined;
   finalRemarks: string;
+  photoUrls: string[];
 }
 
 interface NewExecForm {
@@ -161,6 +171,7 @@ const EMPTY_LEAD: LeadForm = {
   callTemperature: "",
   nextFollowUpDate: undefined,
   finalRemarks: "",
+  photoUrls: [],
 };
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
@@ -266,6 +277,9 @@ export default function NewLeadPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Photos
+  const [photos, setPhotos] = useState<File[]>([]);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -385,6 +399,23 @@ export default function NewLeadPage() {
     );
   }, []);
 
+  // ── Photos ──────────────────────────────────────────────────────────────
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      if (photos.length + selectedFiles.length > 4) {
+        setSubmitError("You can only upload a maximum of 4 photos.");
+        return;
+      }
+      setPhotos((prev) => [...prev, ...selectedFiles].slice(0, 4));
+      setSubmitError(null);
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
+
   // ── Submit Lead ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!form.executiveId || !form.organisationId || !form.visitDate || !form.callType) {
@@ -407,11 +438,39 @@ export default function NewLeadPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      let uploadedUrls: string[] = [];
+
+      if (photos.length > 0) {
+        if (!supabase) {
+          throw new Error("Supabase is not configured. Please check your environment variables.");
+        }
+        for (const photo of photos) {
+          const fileExt = photo.name.split(".").pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+
+          const { data, error } = await supabase.storage
+            .from("client-locations")
+            .upload(fileName, photo, { cacheControl: "3600", upsert: false });
+
+          if (error) {
+            console.error("Supabase Storage Error details:", error, "URL configured:", supabaseUrl);
+            throw new Error(`Upload failed for ${photo.name}: ${error.message}`);
+          }
+
+          const { data: urlData } = supabase.storage
+            .from("client-locations")
+            .getPublicUrl(fileName);
+
+          uploadedUrls.push(urlData.publicUrl);
+        }
+      }
+
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          photoUrls: uploadedUrls,
           visitDate: form.visitDate ? format(form.visitDate, "yyyy-MM-dd") : undefined,
           nextFollowUpDate: form.nextFollowUpDate ? format(form.nextFollowUpDate, "yyyy-MM-dd") : undefined,
           callTemperature: form.callTemperature || undefined,
@@ -445,7 +504,7 @@ export default function NewLeadPage() {
           <h2 className="font-display text-3xl font-bold text-white">Lead Captured</h2>
           <p className="mt-2 text-slate-400">The visit has been logged successfully.</p>
           <Button
-            onClick={() => { setSubmitted(false); setForm(EMPTY_LEAD); }}
+            onClick={() => { setSubmitted(false); setForm(EMPTY_LEAD); setPhotos([]); }}
             className="mt-8 bg-amber-500 text-black hover:bg-amber-400"
           >
             Log Another Visit
@@ -1301,10 +1360,62 @@ export default function NewLeadPage() {
               </div>
             </Section>
 
+        {/* ── 9. Photos ── */}
+        <Section icon={ImageIcon} title="Location Photos" subtitle="Section 09" index={9}>
+          <div className="space-y-4">
+            <FieldLabel>Upload up to 4 photos</FieldLabel>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="dark-input relative overflow-hidden h-10 px-4"
+                onClick={() => document.getElementById("photo-upload")?.click()}
+                disabled={photos.length >= 4}
+              >
+                <UploadCloudIcon className="mr-2 h-4 w-4" />
+                {photos.length >= 4 ? "Max Photos Reached" : "Select Photos"}
+                <input
+                  id="photo-upload"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                  disabled={photos.length >= 4}
+                />
+              </Button>
+              <div className="flex items-center text-xs text-slate-500">
+                {photos.length}/4 selected
+              </div>
+            </div>
+
+            {photos.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-slide-down">
+                {photos.map((photo, index) => (
+                  <div key={index} className="relative group aspect-square rounded-xl border border-white/[0.08] overflow-hidden bg-white/[0.02]">
+                    <img
+                      src={URL.createObjectURL(photo)}
+                      alt={`Preview ${index}`}
+                      className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(index)}
+                      className="absolute top-2 right-2 rounded-full bg-black/60 p-1.5 text-slate-300 hover:bg-red-500 hover:text-white transition-colors"
+                    >
+                      <XIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Section>
+
           </div>
 
           {/* ── Submit ── */}
-          <div className="mt-6 animate-section" style={{ animationDelay: "800ms" }}>
+      <div className="mt-6 animate-section" style={{ animationDelay: "1000ms" }}>
             {submitError && (
               <div className="mb-3 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400 ring-1 ring-red-500/20">
                 {submitError}
