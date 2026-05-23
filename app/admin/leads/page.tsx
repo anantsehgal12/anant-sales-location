@@ -2,6 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   LoaderCircleIcon,
   PlusCircleIcon,
@@ -10,6 +26,7 @@ import {
   CalendarIcon,
   EyeIcon,
   DownloadIcon,
+  FilterIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useUser } from "@clerk/nextjs";
@@ -39,6 +56,13 @@ export default function AdminLeads() {
   const [data, setData] = useState<LeadRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterTemp, setFilterTemp] = useState("All");
+  const [filterType, setFilterType] = useState("All");
+  const [sortBy, setSortBy] = useState("dateDesc");
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
 
   const { user } = useUser();
 
@@ -188,6 +212,51 @@ export default function AdminLeads() {
     }
   };
 
+  const filteredData = data.filter((row) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const orgMatch = row.organisation?.orgName?.toLowerCase().includes(q);
+      const execMatch = row.executive?.name?.toLowerCase().includes(q);
+      const remarksMatch = row.lead.finalRemarks?.toLowerCase().includes(q);
+      if (!orgMatch && !execMatch && !remarksMatch) return false;
+    }
+    if (filterTemp !== "All") {
+      if (!row.lead.callTemperature?.includes(filterTemp)) return false;
+    }
+    if (filterType !== "All") {
+      if (row.lead.callType !== filterType) return false;
+    }
+    if (startDate) {
+      if (!row.lead.visitDate) return false;
+      const rowDate = new Date(row.lead.visitDate);
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      if (rowDate < start) return false;
+    }
+    if (endDate) {
+      if (!row.lead.visitDate) return false;
+      const rowDate = new Date(row.lead.visitDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      if (rowDate > end) return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    if (sortBy === "dateDesc") {
+      return new Date(b.lead.visitDate || 0).getTime() - new Date(a.lead.visitDate || 0).getTime();
+    }
+    if (sortBy === "dateAsc") {
+      return new Date(a.lead.visitDate || 0).getTime() - new Date(b.lead.visitDate || 0).getTime();
+    }
+    if (sortBy === "orgAsc") {
+      return (a.organisation?.orgName || "").localeCompare(b.organisation?.orgName || "");
+    }
+    if (sortBy === "execAsc") {
+      return (a.executive?.name || "").localeCompare(b.executive?.name || "");
+    }
+    return 0;
+  });
+
   if (isAdmin(user)) {
     return (
       <div className="font-body min-h-screen bg-[#0a0c10] text-slate-200 p-6 sm:p-10">
@@ -222,6 +291,127 @@ export default function AdminLeads() {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="dark-input w-full sm:w-auto gap-2">
+                    <FilterIcon className="h-4 w-4" /> Filter & Sort
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 bg-[#0f1218] border border-white/[0.08] text-slate-200 p-4" align="end">
+                  <div className="space-y-4">
+                    <h4 className="font-display font-semibold text-white">Filter & Sort</h4>
+                    
+                    <div>
+                      <Label className="text-xs text-slate-400">Search</Label>
+                      <Input 
+                        placeholder="Org, Executive, Remarks..." 
+                        className="dark-input mt-1.5 h-8 text-sm"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-slate-400">From Date</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "dark-input mt-1.5 h-8 w-full justify-start text-left font-normal text-sm",
+                                !startDate && "text-slate-500"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+                              {startDate ? format(startDate, "dd MMM yyyy") : "Pick a date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto bg-[#131720] border-white/[0.08] p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={startDate}
+                              onSelect={setStartDate}
+                              className="text-slate-200"
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-slate-400">To Date</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "dark-input mt-1.5 h-8 w-full justify-start text-left font-normal text-sm",
+                                !endDate && "text-slate-500"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+                              {endDate ? format(endDate, "dd MMM yyyy") : "Pick a date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto bg-[#131720] border-white/[0.08] p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={endDate}
+                              onSelect={setEndDate}
+                              className="text-slate-200"
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-slate-400">Temperature</Label>
+                        <Select value={filterTemp} onValueChange={setFilterTemp}>
+                          <SelectTrigger className="dark-input mt-1.5 h-8 text-sm text-left">
+                            <SelectValue placeholder="All" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
+                            <SelectItem value="All">All</SelectItem>
+                            <SelectItem value="Hot">Hot</SelectItem>
+                            <SelectItem value="Warm">Warm</SelectItem>
+                            <SelectItem value="Cold">Cold</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-slate-400">Sort By</Label>
+                        <Select value={sortBy} onValueChange={setSortBy}>
+                          <SelectTrigger className="dark-input mt-1.5 h-8 text-sm text-left">
+                            <SelectValue placeholder="Sort" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
+                            <SelectItem value="dateDesc">Newest First</SelectItem>
+                            <SelectItem value="dateAsc">Oldest First</SelectItem>
+                            <SelectItem value="orgAsc">Org Name (A-Z)</SelectItem>
+                            <SelectItem value="execAsc">Executive (A-Z)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <Button 
+                      variant="ghost" 
+                      className="w-full h-8 text-xs text-slate-400 hover:text-white mt-2"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setFilterTemp("All");
+                        setFilterType("All");
+                        setSortBy("dateDesc");
+                        setStartDate(undefined);
+                        setEndDate(undefined);
+                      }}
+                    >
+                      Clear Filters
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Button
                 variant="outline"
                 onClick={handleExport}
@@ -251,13 +441,13 @@ export default function AdminLeads() {
               <div className="p-10 flex justify-center text-amber-500">
                 <LoaderCircleIcon className="animate-spin h-8 w-8" />
               </div>
-            ) : data.length === 0 ? (
+            ) : filteredData.length === 0 ? (
               <div className="p-10 text-center text-slate-500">
                 No leads found.
               </div>
             ) : (
               <div className="divide-y divide-white/[0.06]">
-                {data.map((row) => (
+                {filteredData.map((row) => (
                   <div
                     key={row.lead.id}
                     className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between p-5 hover:bg-white/[0.02] transition-colors"
