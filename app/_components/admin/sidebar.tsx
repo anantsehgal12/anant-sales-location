@@ -58,7 +58,7 @@ export default function Side() {
     <section className="font-display">
       <Sidebar collapsible="icon" variant="floating">
         <SidebarHeader>
-          <Link href="/">
+          <Link href="/admin">
             <main className="flex justify-center items-center gap-5 pt-1">
               <UserPlus className="w-16 h-16 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8" />
               <h1 className="group-data-[collapsible=icon]:hidden text-center font-bold text-xl">
