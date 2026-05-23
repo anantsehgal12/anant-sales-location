@@ -18,7 +18,12 @@ export default function Header() {
     // Add more paths and titles as needed
   };
 
-  const title = pageTitles[pathname] || "Page Title";
+  let title = pageTitles[pathname];
+  if (!title && pathname.startsWith("/admin/leads/")) {
+    title = "Lead Details";
+  }
+  title = title || "Page Title";
+
   return (
     <main>
       <div className="w-full h-10 border-b-2 flex justify-between items-center p-10">

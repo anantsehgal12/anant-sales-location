@@ -1,19 +1,53 @@
-import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import { Show, SignInButton, useUser, SignUpButton, UserButton } from "@clerk/nextjs";
+import Link from "next/link";
+import { isAdmin } from "@/lib/isAdmis";
+import { Button } from "@/components/ui/button";
 
 function Navbar() {
+  const {user} = useUser();
   return (
-    <header className="flex justify-end items-center p-4 gap-4 h-16">
-      <Show when="signed-out">
-        <SignInButton />
-        <SignUpButton>
-          <button className="bg-purple-700 text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
-            Sign Up
-          </button>
-        </SignUpButton>
-      </Show>
-      <Show when="signed-in">
-        <UserButton />
-      </Show>
+    <header className="h-20 flex items-center top-0 z-50 w-full border-b border-white/[0.08] bg-[#0a0c10]/80 backdrop-blur-md text-slate-200">
+      <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-8">
+          <Link href="/" className="flex items-center gap-5 text-3xl font-extrabold tracking-tighter text-white">
+           <img src="https://uacqmejpbzojibsrtift.supabase.co/storage/v1/object/sign/logos&all/AS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8yOWY1YzVhZi04NmVjLTQ4ZmItYjFmOS1mY2NmZTlmODA1MTgiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcyZhbGwvQVMucG5nIiwiaWF0IjoxNzc5NTMxNzgyLCJleHAiOjg4MTc5NDQ1MzgyfQ.JIqeZl_TP89znbzUq0Q_M1WCOMP6fnOEYeS1V3nVXbY" alt="Anant Sales Logo" width={32} height={32} className="rounded-full" />
+            
+            <span className="bg-clip-text font-display text-transparent bg-gradient-to-r from-purple-400 to-blue-500">
+              Anant Sales
+            </span>
+          </Link>
+          {isAdmin(user) && (
+            <nav className="hidden md:flex gap-6">
+              <Link href="/admin" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                Admin Dashboard
+              </Link>
+            </nav>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4">
+          <Show when="signed-out">
+            <SignInButton>
+              <Button className="px-6">
+                Sign In
+              </Button>
+            </SignInButton>
+            <SignUpButton>
+              <Button variant="outline" className="px-6">
+                Sign Up
+              </Button>
+            </SignUpButton>
+          </Show>
+          <Show when="signed-in">
+            <div className="flex items-center gap-4">
+              <Link href="/admin" className="md:hidden text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                Admin
+              </Link>
+              <UserButton appearance={{ elements: { avatarBox: "w-9 h-9 border border-white/10" } }} />
+            </div>
+          </Show>
+        </div>
+      </div>
     </header>
   );
 }
