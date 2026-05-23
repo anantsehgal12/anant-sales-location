@@ -15,6 +15,7 @@ export default function Header() {
     "/admin/leads": "Leads",
     "/admin/org": "Organisations",
     "/admin/executives": "Executives",
+    "/admin": "Dashboard",
     // Add more paths and titles as needed
   };
 
