@@ -157,7 +157,7 @@ export default async function LeadDetailsPage(
         <div className="relative w-full  mx-auto px-3 sm:px-6 lg:px-10 xl:px-16 pt-10">
           {/* Header */}
           <div className="mb-8 animate-section" style={{ animationDelay: "0ms" }}>
-            <Button asChild variant="ghost" className="mb-6 -ml-4 text-slate-400 hover:text-white">
+            <Button asChild variant="ghost" className="mb-6 sm:-ml-4 text-slate-400 hover:text-white">
               <Link href="/admin/leads">
                 <ArrowLeftIcon className="h-4 w-4 mr-2" /> Back to Leads
               </Link>

@@ -212,7 +212,7 @@ export default function AdminLeads() {
         </div>
 
         <div className="relative mx-auto">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div>
               <h1 className="font-display text-3xl font-extrabold text-white">
                 Leads Log
@@ -221,12 +221,12 @@ export default function AdminLeads() {
                 Review captured field visits and outcomes.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
               <Button
                 variant="outline"
                 onClick={handleExport}
                 disabled={exporting}
-                className="dark-input gap-2"
+                className="dark-input w-full sm:w-auto gap-2"
               >
                 {exporting ? (
                   <LoaderCircleIcon className="h-4 w-4 animate-spin" />
@@ -239,7 +239,7 @@ export default function AdminLeads() {
                 onClick={() => {
                   window.location.href = "/";
                 }}
-                className="bg-amber-500 text-black hover:bg-amber-400 gap-2 font-semibold"
+                className="bg-amber-500 text-black w-full sm:w-auto hover:bg-amber-400 gap-2 font-semibold"
               >
                 <PlusCircleIcon className="h-4 w-4" /> Open Capture Form
               </Button>

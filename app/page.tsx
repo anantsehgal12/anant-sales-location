@@ -603,7 +603,7 @@ export default function NewLeadPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") handleCreateExec(); }}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <FieldLabel>Email</FieldLabel>
                 <Input
@@ -687,7 +687,7 @@ export default function NewLeadPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <FieldLabel>Area / Locality</FieldLabel>
                 <Input
@@ -1049,7 +1049,7 @@ export default function NewLeadPage() {
 
                 {form.locationLat && form.locationLng && (
                   <div className="space-y-2 animate-slide-down">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <FieldLabel>Latitude</FieldLabel>
                         <Input className="dark-input font-mono text-xs" value={form.locationLat.toFixed(6)} readOnly />

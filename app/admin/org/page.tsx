@@ -117,7 +117,7 @@ export default function AdminOrganisations() {
         </div>
 
         <div className="relative mx-auto">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div>
               <h1 className="font-display text-3xl font-extrabold text-white">
                 Companies
@@ -132,7 +132,7 @@ export default function AdminOrganisations() {
                 setEditingId(null);
                 setIsOpen(true);
               }}
-              className="bg-amber-500 text-black hover:bg-amber-400 gap-2 font-semibold"
+              className="bg-amber-500 w-full sm:w-auto text-black hover:bg-amber-400 gap-2 font-semibold"
             >
               <PlusCircleIcon className="h-4 w-4" /> Add Company
             </Button>
@@ -152,7 +152,7 @@ export default function AdminOrganisations() {
                 {data.map((org) => (
                   <div
                     key={org.id}
-                    className="flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 hover:bg-white/[0.02] transition-colors"
                   >
                     <div className="flex items-center gap-4">
                       <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 ring-1 ring-blue-500/20">
@@ -169,7 +169,7 @@ export default function AdminOrganisations() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 self-end sm:self-auto">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -230,7 +230,7 @@ export default function AdminOrganisations() {
               </SelectContent>
             </Select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs text-slate-400">Area</Label>
                   <Input
