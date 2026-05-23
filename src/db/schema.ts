@@ -32,9 +32,10 @@ export const discussionForEnum = pgEnum("discussion_for", [
   "Any Other",
 ]);
 
-export const dthProviderEnum = pgEnum("dth_provider", [
+export const serviceProviderEnum = pgEnum("service_provider", [
   "Airtel",
   "Jio",
+  "VI",
   "Tata Play",
   "Dish TV",
   "Videocon",
@@ -42,16 +43,7 @@ export const dthProviderEnum = pgEnum("dth_provider", [
   "Any Other",
 ]);
 
-export const internetProviderEnum = pgEnum("internet_provider", [
-  "Airtel",
-  "Jio",
-  "VI",
-  "Tata Play",
-  "Local Operators",
-  "Any Other",
-]);
-
-export const callTemperatureEnum = pgEnum("call_temperature", ["Hot", "Cold"]);
+export const callTemperatureEnum = pgEnum("call_temperature", ["Hot [Within 15 Days]", "Warm [Within a month or two]", "Cold [More than 2 Months]"]);
 
 export const orgSegmentEnum = pgEnum("org_segment", [
   "SME",
@@ -114,34 +106,47 @@ export const leads = pgTable("leads", {
   locationLat: doublePrecision("location_lat"),
   locationLng: doublePrecision("location_lng"),
 
-  // ── Contact at the organisation ───────────
-  contactPersonName: varchar("contact_person_name", { length: 256 }),
-  contactPersonDesignationDept: varchar("contact_person_designation_dept", {
-    length: 256,
-  }),
-  contactPersonPhone: varchar("contact_person_phone", { length: 20 }),
-
-  // ── Discussion ────────────────────────────
-  discussionFor: discussionForEnum("discussion_for").notNull(),
-
-  // ── Current providers ─────────────────────
-  currentProviderDth: dthProviderEnum("current_provider_dth"),
-  currentProviderInternet: internetProviderEnum("current_provider_internet"),
-
-  // ── Commercial details ────────────────────
-  noOfConnections: integer("no_of_connections"),
-  currentRentalPlan: varchar("current_rental_plan", { length: 256 }),
-  totalMonthlyExpenses: decimal("total_monthly_expenses", {
-    precision: 12,
-    scale: 2,
-  }),
-
   // ── Outcome ───────────────────────────────
   callTemperature: callTemperatureEnum("call_temperature"),
   nextFollowUpDate: date("next_follow_up_date"),
   finalRemarks: text("final_remarks"),
 
   // ── Timestamps ────────────────────────────
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─────────────────────────────────────────────
+// 4. LEAD CONTACTS
+// ─────────────────────────────────────────────
+
+export const leadContacts = pgTable("lead_contacts", {
+  id: uuid("id").primaryKey().defaultRandom().unique(),
+  leadId: uuid("lead_id")
+    .notNull()
+    .references(() => leads.id, { onDelete: "cascade" }),
+  contactPersonName: varchar("contact_person_name", { length: 256 }).notNull(),
+  contactPersonDesignationDept: varchar("contact_person_designation_dept", { length: 256 }),
+  contactPersonPhone: varchar("contact_person_phone", { length: 20 }),
+  discussionFor: discussionForEnum("discussion_for").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─────────────────────────────────────────────
+// 5. LEAD COMMERCIAL DETAILS
+// ─────────────────────────────────────────────
+
+export const leadCommercialDetails = pgTable("lead_commercial_details", {
+  id: uuid("id").primaryKey().defaultRandom().unique(),
+  leadId: uuid("lead_id")
+    .notNull()
+    .references(() => leads.id, { onDelete: "cascade" }),
+  serviceType: discussionForEnum("service_type").notNull(),
+  currentProvider: serviceProviderEnum("current_provider"),
+  noOfConnections: integer("no_of_connections"),
+  currentRentalPlan: varchar("current_rental_plan", { length: 256 }),
+  totalMonthlyExpenses: decimal("total_monthly_expenses", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -158,7 +163,7 @@ export const organisationsRelations = relations(organisations, ({ many }) => ({
   leads: many(leads),
 }));
 
-export const leadsRelations = relations(leads, ({ one }) => ({
+export const leadsRelations = relations(leads, ({ one, many }) => ({
   executive: one(executives, {
     fields: [leads.executiveId],
     references: [executives.id],
@@ -166,6 +171,22 @@ export const leadsRelations = relations(leads, ({ one }) => ({
   organisation: one(organisations, {
     fields: [leads.organisationId],
     references: [organisations.id],
+  }),
+  contacts: many(leadContacts),
+  commercialDetails: many(leadCommercialDetails),
+}));
+
+export const leadContactsRelations = relations(leadContacts, ({ one }) => ({
+  lead: one(leads, {
+    fields: [leadContacts.leadId],
+    references: [leads.id],
+  }),
+}));
+
+export const leadCommercialDetailsRelations = relations(leadCommercialDetails, ({ one }) => ({
+  lead: one(leads, {
+    fields: [leadCommercialDetails.leadId],
+    references: [leads.id],
   }),
 }));
 
@@ -181,3 +202,9 @@ export type NewOrganisation = typeof organisations.$inferInsert;
 
 export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
+
+export type LeadContact = typeof leadContacts.$inferSelect;
+export type NewLeadContact = typeof leadContacts.$inferInsert;
+
+export type LeadCommercialDetail = typeof leadCommercialDetails.$inferSelect;
+export type NewLeadCommercialDetail = typeof leadCommercialDetails.$inferInsert;

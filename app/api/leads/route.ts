@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { leads, executives, organisations } from "@/src/db/schema";
+import { leads, executives, organisations, leadContacts, leadCommercialDetails } from "@/src/db/schema";
 import { ok, created, badRequest, serverError, unauthorized } from "@/lib/api-helpers";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { eq, desc } from "drizzle-orm";
@@ -63,23 +63,17 @@ export async function POST(req: NextRequest) {
       callType,
       locationLat,
       locationLng,
-      contactPersonName,
-      contactPersonDesignationDept,
-      discussionFor,
-      currentProviderDth,
-      currentProviderInternet,
-      noOfConnections,
-      currentRentalPlan,
-      totalMonthlyExpenses,
+      contacts,
+      commercialDetails,
       callTemperature,
       nextFollowUpDate,
       finalRemarks,
     } = body;
 
     // 2. Check required fields from the frontend
-    if (!executiveId || !organisationId || !visitDate || !callType || !discussionFor) {
+    if (!executiveId || !organisationId || !visitDate || !callType || !Array.isArray(contacts) || contacts.length === 0) {
       return badRequest(
-        "executiveId, organisationId, visitDate, callType, and discussionFor are required"
+        "executiveId, organisationId, visitDate, callType, and at least one contact are required"
       );
     }
 
@@ -92,19 +86,38 @@ export async function POST(req: NextRequest) {
         callType,
         locationLat,
         locationLng,
-        contactPersonName,
-        contactPersonDesignationDept,
-        discussionFor,
-        currentProviderDth,
-        currentProviderInternet,
-        noOfConnections,
-        currentRentalPlan,
-        totalMonthlyExpenses,
         callTemperature,
         nextFollowUpDate,
         finalRemarks,
       })
       .returning();
+
+    // 3. Insert contacts
+    if (row && contacts.length > 0) {
+      await db.insert(leadContacts).values(
+        contacts.map((c: any) => ({
+          leadId: row.id,
+          contactPersonName: c.contactPersonName,
+          contactPersonDesignationDept: c.contactPersonDesignationDept,
+          contactPersonPhone: c.contactPersonPhone,
+          discussionFor: c.discussionFor,
+        }))
+      );
+    }
+
+    // 4. Insert commercial details
+    if (row && commercialDetails && commercialDetails.length > 0) {
+      await db.insert(leadCommercialDetails).values(
+        commercialDetails.map((cd: any) => ({
+          leadId: row.id,
+          serviceType: cd.serviceType,
+          currentProvider: cd.currentProvider || null,
+          noOfConnections: cd.noOfConnections ? parseInt(cd.noOfConnections) : null,
+          currentRentalPlan: cd.currentRentalPlan || null,
+          totalMonthlyExpenses: cd.totalMonthlyExpenses || null,
+        }))
+      );
+    }
 
     return created(row);
   } catch (e) {

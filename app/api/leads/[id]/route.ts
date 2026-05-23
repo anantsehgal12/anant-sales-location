@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { leads, executives, organisations } from "@/src/db/schema";
+import { leads, executives, organisations, leadContacts, leadCommercialDetails } from "@/src/db/schema";
 import {
   ok,
   noContent,
@@ -39,6 +39,23 @@ export async function GET(_req: NextRequest, props: Params) {
       .where(eq(leads.id, params.id));
 
     if (!row) return notFound("Lead");
+
+    // Fetch contacts
+    const contacts = await db
+      .select()
+      .from(leadContacts)
+      .where(eq(leadContacts.leadId, row.lead.id));
+
+    (row.lead as any).contacts = contacts;
+
+    // Fetch commercial details
+    const commercialDetails = await db
+      .select()
+      .from(leadCommercialDetails)
+      .where(eq(leadCommercialDetails.leadId, row.lead.id));
+
+    (row.lead as any).commercialDetails = commercialDetails;
+
     return ok(row);
   } catch (e) {
     return serverError(e);
@@ -58,15 +75,6 @@ export async function PATCH(req: NextRequest, props: Params) {
       "callType",
       "locationLat",
       "locationLng",
-      "contactPersonName",
-      "contactPersonDesignationDept",
-      "contactPersonPhone",
-      "discussionFor",
-      "currentProviderDth",
-      "currentProviderInternet",
-      "noOfConnections",
-      "currentRentalPlan",
-      "totalMonthlyExpenses",
       "callTemperature",
       "nextFollowUpDate",
       "finalRemarks",

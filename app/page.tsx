@@ -56,18 +56,26 @@ import {
   ChevronsUpDownIcon,
   CheckIcon,
   BriefcaseIcon,
+  Trash2Icon,
+  UsersIcon,
 } from "lucide-react";
 import Navbar from "./_components/Navbar";
+import {
+  callTemperatureEnum,
+  callTypeEnum,
+  discussionForEnum,
+  serviceProviderEnum,
+  orgSegmentEnum,
+} from "@/src/db/schema";
 
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type CallType = "Fresh" | "Follow-Up" | "Service" | "Recharge Related" | "Any Other";
-type DiscussionFor = "DTH" | "Internet" | "TollFree Service" | "SIP Trunk" | "Any Other";
-type DthProvider = "Airtel" | "Jio" | "Tata Play" | "Dish TV" | "Videocon" | "Local Operators" | "Any Other";
-type InternetProvider = "Airtel" | "Jio" | "VI" | "Tata Play" | "Local Operators" | "Any Other";
-type CallTemperature = "Hot" | "Cold";
-type OrgSegment = "SME" | "Enterprise" | "Government" | "Education" | "Healthcare" | "Hospitality" | "Any Other";
+type CallType = typeof callTypeEnum.enumValues[number];
+type DiscussionFor = typeof discussionForEnum.enumValues[number];
+type ServiceProvider = typeof serviceProviderEnum.enumValues[number];
+type CallTemperature = typeof callTemperatureEnum.enumValues[number];
+type OrgSegment = typeof orgSegmentEnum.enumValues[number];
 
 interface Executive {
   id: string;
@@ -84,6 +92,21 @@ interface Organisation {
   orgPincode: string | null;
 }
 
+interface ContactForm {
+  contactPersonName: string;
+  contactPersonDesignationDept: string;
+  contactPersonPhone: string;
+  discussionFor: DiscussionFor | "";
+}
+
+interface CommercialDetailForm {
+  serviceType: DiscussionFor | "";
+  currentProvider: ServiceProvider | "";
+  noOfConnections: string;
+  currentRentalPlan: string;
+  totalMonthlyExpenses: string;
+}
+
 interface LeadForm {
   executiveId: string;
   organisationId: string;
@@ -91,15 +114,8 @@ interface LeadForm {
   callType: CallType | "";
   locationLat: number | null;
   locationLng: number | null;
-  contactPersonName: string;
-  contactPersonDesignationDept: string;
-  contactPersonPhone: string;
-  discussionFor: DiscussionFor | "";
-  currentProviderDth: DthProvider | "";
-  currentProviderInternet: InternetProvider | "";
-  noOfConnections: string;
-  currentRentalPlan: string;
-  totalMonthlyExpenses: string;
+  contacts: ContactForm[];
+  commercialDetails: CommercialDetailForm[];
   callTemperature: CallTemperature | "";
   nextFollowUpDate: Date | undefined;
   finalRemarks: string;
@@ -125,15 +141,23 @@ const EMPTY_LEAD: LeadForm = {
   callType: "",
   locationLat: null,
   locationLng: null,
-  contactPersonName: "",
-  contactPersonDesignationDept: "",
-  contactPersonPhone: "",
-  discussionFor: "",
-  currentProviderDth: "",
-  currentProviderInternet: "",
-  noOfConnections: "",
-  currentRentalPlan: "",
-  totalMonthlyExpenses: "",
+  contacts: [
+    {
+      contactPersonName: "",
+      contactPersonDesignationDept: "",
+      contactPersonPhone: "",
+      discussionFor: "",
+    },
+  ],
+  commercialDetails: [
+    {
+      serviceType: "",
+      currentProvider: "",
+      noOfConnections: "",
+      currentRentalPlan: "",
+      totalMonthlyExpenses: "",
+    },
+  ],
   callTemperature: "",
   nextFollowUpDate: undefined,
   finalRemarks: "",
@@ -363,10 +387,23 @@ export default function NewLeadPage() {
 
   // ── Submit Lead ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!form.executiveId || !form.organisationId || !form.visitDate || !form.callType || !form.discussionFor) {
+    if (!form.executiveId || !form.organisationId || !form.visitDate || !form.callType) {
       setSubmitError("Please fill in all required fields before submitting.");
       return;
     }
+
+    const hasInvalidContact = form.contacts.some(c => !c.contactPersonName.trim() || !c.discussionFor);
+    if (hasInvalidContact) {
+      setSubmitError("Please provide a name and discussion topic for all contacts.");
+      return;
+    }
+
+    const hasInvalidCommercial = form.commercialDetails.some(cd => !cd.serviceType);
+    if (hasInvalidCommercial) {
+      setSubmitError("Please select a Service Type for all commercial details.");
+      return;
+    }
+
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -377,10 +414,6 @@ export default function NewLeadPage() {
           ...form,
           visitDate: form.visitDate ? format(form.visitDate, "yyyy-MM-dd") : undefined,
           nextFollowUpDate: form.nextFollowUpDate ? format(form.nextFollowUpDate, "yyyy-MM-dd") : undefined,
-          noOfConnections: form.noOfConnections ? parseInt(form.noOfConnections) : undefined,
-          totalMonthlyExpenses: form.totalMonthlyExpenses || undefined,
-          currentProviderDth: form.currentProviderDth || undefined,
-          currentProviderInternet: form.currentProviderInternet || undefined,
           callTemperature: form.callTemperature || undefined,
         }),
       });
@@ -589,7 +622,7 @@ export default function NewLeadPage() {
                   <SelectValue placeholder="Select segment…" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
-                  {["SME", "Enterprise", "Government", "Education", "Healthcare", "Hospitality", "Any Other"].map((s) => (
+                  {orgSegmentEnum.enumValues.map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
@@ -929,7 +962,7 @@ export default function NewLeadPage() {
                       <SelectValue placeholder="Select type…" />
                     </SelectTrigger>
                     <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
-                      {["Fresh", "Follow-Up", "Service", "Recharge Related", "Any Other"].map((t) => (
+                      {callTypeEnum.enumValues.map((t) => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
                     </SelectContent>
@@ -987,89 +1020,214 @@ export default function NewLeadPage() {
               </div>
             </Section>
 
-            {/* ── 5. Contact Person ── */}
-            <Section icon={UserIcon} title="Contact Person" subtitle="Section 05" index={5}>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <FieldLabel>Name</FieldLabel>
-                  <Input className="dark-input" placeholder="e.g. Ramesh Gupta" value={form.contactPersonName} onChange={(e) => set("contactPersonName", e.target.value)} />
-                </div>
-                <div>
-                  <FieldLabel>Designation / Dept.</FieldLabel>
-                  <Input className="dark-input" placeholder="e.g. IT Manager" value={form.contactPersonDesignationDept} onChange={(e) => set("contactPersonDesignationDept", e.target.value)} />
-                </div>
-                <div>
-                  <FieldLabel>Phone Number</FieldLabel>
-                  <Input className="dark-input" placeholder="e.g. 9876543210" value={form.contactPersonPhone} onChange={(e) => set("contactPersonPhone", e.target.value)} />
-                </div>
+            {/* ── 5. Contacts & Discussions ── */}
+            <Section icon={UsersIcon} title="Contacts & Discussions" subtitle="Section 05" index={5}>
+              <div className="space-y-6">
+                {form.contacts.map((contact, index) => (
+                  <div key={index} className="relative rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
+                    {form.contacts.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newContacts = [...form.contacts];
+                          newContacts.splice(index, 1);
+                          set("contacts", newContacts);
+                        }}
+                        className="absolute -right-2 -top-2 rounded-full bg-red-500/20 p-1.5 text-red-400 hover:bg-red-500/30 transition-colors"
+                      >
+                        <Trash2Icon className="h-4 w-4" />
+                      </button>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <FieldLabel required>Name</FieldLabel>
+                        <Input
+                          className="dark-input"
+                          placeholder="e.g. Ramesh Gupta"
+                          value={contact.contactPersonName}
+                          onChange={(e) => {
+                            const newContacts = [...form.contacts];
+                            newContacts[index].contactPersonName = e.target.value;
+                            set("contacts", newContacts);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel required>Discussion For</FieldLabel>
+                        <Select
+                          value={contact.discussionFor}
+                          onValueChange={(v) => {
+                            const newContacts = [...form.contacts];
+                            newContacts[index].discussionFor = v as DiscussionFor;
+                            set("contacts", newContacts);
+                          }}
+                        >
+                          <SelectTrigger className="dark-input w-full">
+                            <SelectValue placeholder="Which service?" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
+                            {discussionForEnum.enumValues.map((s) => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <FieldLabel>Designation / Dept.</FieldLabel>
+                        <Input
+                          className="dark-input"
+                          placeholder="e.g. IT Manager"
+                          value={contact.contactPersonDesignationDept}
+                          onChange={(e) => {
+                            const newContacts = [...form.contacts];
+                            newContacts[index].contactPersonDesignationDept = e.target.value;
+                            set("contacts", newContacts);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>Phone Number</FieldLabel>
+                        <Input
+                          className="dark-input"
+                          placeholder="e.g. 9876543210"
+                          value={contact.contactPersonPhone}
+                          onChange={(e) => {
+                            const newContacts = [...form.contacts];
+                            newContacts[index].contactPersonPhone = e.target.value;
+                            set("contacts", newContacts);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-dashed border-white/[0.1] bg-transparent text-amber-400/80 hover:bg-amber-500/10 hover:text-amber-400"
+                  onClick={() => set("contacts", [...form.contacts, { contactPersonName: "", contactPersonDesignationDept: "", contactPersonPhone: "", discussionFor: "" }])}
+                >
+                  <PlusCircleIcon className="mr-2 h-4 w-4" /> Add Another Contact
+                </Button>
               </div>
             </Section>
 
-            {/* ── 6. Service Discussion ── */}
-            <Section icon={WifiIcon} title="Service Discussion" subtitle="Section 06" index={6}>
-              <div className="space-y-4">
-                <div>
-                  <FieldLabel required>Discussion For</FieldLabel>
-                  <Select value={form.discussionFor} onValueChange={(v) => set("discussionFor", v as DiscussionFor)}>
-                    <SelectTrigger className="dark-input w-full">
-                      <SelectValue placeholder="Which service?" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
-                      {["DTH", "Internet", "TollFree Service", "SIP Trunk", "Any Other"].map((s) => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            {/* ── 6. Commercial Details ── */}
+            <Section icon={WifiIcon} title="Commercial Details" subtitle="Section 06" index={6}>
+              <div className="space-y-6">
+                {form.commercialDetails.map((detail, index) => (
+                  <div key={index} className="relative rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
+                    {form.commercialDetails.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newDetails = [...form.commercialDetails];
+                          newDetails.splice(index, 1);
+                          set("commercialDetails", newDetails);
+                        }}
+                        className="absolute -right-2 -top-2 rounded-full bg-red-500/20 p-1.5 text-red-400 hover:bg-red-500/30 transition-colors"
+                      >
+                        <Trash2Icon className="h-4 w-4" />
+                      </button>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <FieldLabel required>Service Type</FieldLabel>
+                        <Select
+                          value={detail.serviceType}
+                          onValueChange={(v) => {
+                            const newDetails = [...form.commercialDetails];
+                            newDetails[index].serviceType = v as DiscussionFor;
+                            set("commercialDetails", newDetails);
+                          }}
+                        >
+                          <SelectTrigger className="dark-input w-full">
+                            <SelectValue placeholder="Which service?" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
+                            {discussionForEnum.enumValues.map((s) => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <FieldLabel>
-                      <span className="flex items-center gap-1.5"><TvIcon className="h-3 w-3 text-slate-500" /> Current DTH Provider</span>
-                    </FieldLabel>
-                    <Select value={form.currentProviderDth} onValueChange={(v) => set("currentProviderDth", v as DthProvider)}>
-                      <SelectTrigger className="dark-input w-full">
-                        <SelectValue placeholder="Current DTH…" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
-                        {["Airtel", "Jio", "Tata Play", "Dish TV", "Videocon", "Local Operators", "Any Other"].map((p) => (
-                          <SelectItem key={p} value={p}>{p}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      <div>
+                        <FieldLabel>Current Provider</FieldLabel>
+                        <Select
+                          value={detail.currentProvider}
+                          onValueChange={(v) => {
+                            const newDetails = [...form.commercialDetails];
+                            newDetails[index].currentProvider = v as ServiceProvider;
+                            set("commercialDetails", newDetails);
+                          }}
+                        >
+                          <SelectTrigger className="dark-input w-full">
+                            <SelectValue placeholder="Select provider…" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
+                            {serviceProviderEnum.enumValues.map((p) => (
+                              <SelectItem key={p} value={p}>{p}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
 
-                  <div>
-                    <FieldLabel>
-                      <span className="flex items-center gap-1.5"><WifiIcon className="h-3 w-3 text-slate-500" /> Current Internet Provider</span>
-                    </FieldLabel>
-                    <Select value={form.currentProviderInternet} onValueChange={(v) => set("currentProviderInternet", v as InternetProvider)}>
-                      <SelectTrigger className="dark-input w-full">
-                        <SelectValue placeholder="Current ISP…" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
-                        {["Airtel", "Jio", "VI", "Tata Play", "Local Operators", "Any Other"].map((p) => (
-                          <SelectItem key={p} value={p}>{p}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <FieldLabel>No. of Connections</FieldLabel>
+                        <Input
+                          className="dark-input"
+                          type="number"
+                          min="1"
+                          placeholder="e.g. 4"
+                          value={detail.noOfConnections}
+                          onChange={(e) => {
+                            const newDetails = [...form.commercialDetails];
+                            newDetails[index].noOfConnections = e.target.value;
+                            set("commercialDetails", newDetails);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>Current Plan</FieldLabel>
+                        <Input
+                          className="dark-input"
+                          placeholder="e.g. Gold HD"
+                          value={detail.currentRentalPlan}
+                          onChange={(e) => {
+                            const newDetails = [...form.commercialDetails];
+                            newDetails[index].currentRentalPlan = e.target.value;
+                            set("commercialDetails", newDetails);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>Monthly Spend (₹)</FieldLabel>
+                        <Input
+                          className="dark-input"
+                          type="number"
+                          placeholder="e.g. 2500"
+                          value={detail.totalMonthlyExpenses}
+                          onChange={(e) => {
+                            const newDetails = [...form.commercialDetails];
+                            newDetails[index].totalMonthlyExpenses = e.target.value;
+                            set("commercialDetails", newDetails);
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <FieldLabel>No. of Connections</FieldLabel>
-                    <Input className="dark-input" type="number" min="1" placeholder="e.g. 4" value={form.noOfConnections} onChange={(e) => set("noOfConnections", e.target.value)} />
-                  </div>
-                  <div>
-                    <FieldLabel>Current Plan</FieldLabel>
-                    <Input className="dark-input" placeholder="e.g. Gold HD" value={form.currentRentalPlan} onChange={(e) => set("currentRentalPlan", e.target.value)} />
-                  </div>
-                  <div>
-                    <FieldLabel>Monthly Spend (₹)</FieldLabel>
-                    <Input className="dark-input" type="number" placeholder="e.g. 2500" value={form.totalMonthlyExpenses} onChange={(e) => set("totalMonthlyExpenses", e.target.value)} />
-                  </div>
-                </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-dashed border-white/[0.1] bg-transparent text-amber-400/80 hover:bg-amber-500/10 hover:text-amber-400"
+                  onClick={() => set("commercialDetails", [...form.commercialDetails, { serviceType: "", currentProvider: "", noOfConnections: "", currentRentalPlan: "", totalMonthlyExpenses: "" }])}
+                >
+                  <PlusCircleIcon className="mr-2 h-4 w-4" /> Add Another Service
+                </Button>
               </div>
             </Section>
 
@@ -1078,10 +1236,29 @@ export default function NewLeadPage() {
               <div className="space-y-4">
                 <div>
                   <FieldLabel>Call Temperature</FieldLabel>
-                  <div className="mt-1 flex gap-3">
-                    <button type="button" onClick={() => set("callTemperature", "Hot")} className={cn("temp-btn", form.callTemperature === "Hot" && "active-hot")}>🔥 Hot</button>
-                    <button type="button" onClick={() => set("callTemperature", "Cold")} className={cn("temp-btn", form.callTemperature === "Cold" && "active-cold")}>🧊 Cold</button>
-                  </div>
+                <div className="mt-1 flex flex-col sm:flex-row gap-3">
+                  {callTemperatureEnum.enumValues.map((temp) => {
+                    const isHot = temp.includes("Hot");
+                    const isWarm = temp.includes("Warm");
+                    const isCold = temp.includes("Cold");
+
+                    return (
+                      <button
+                        key={temp}
+                        type="button"
+                        onClick={() => set("callTemperature", temp as CallTemperature)}
+                        className={cn(
+                          "temp-btn",
+                          form.callTemperature === temp && isHot && "active-hot",
+                          form.callTemperature === temp && isWarm && "active-warm",
+                          form.callTemperature === temp && isCold && "active-cold"
+                        )}
+                      >
+                        {isHot ? "🔥 " : isWarm ? "☀️ " : "🧊 "}{temp}
+                      </button>
+                    );
+                  })}
+                </div>
                 </div>
 
                 <div>
