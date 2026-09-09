@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +61,8 @@ import {
   ImageIcon,
   UploadCloudIcon,
   XIcon,
+  CameraIcon,
+  ImagePlusIcon,
 } from "lucide-react";
 import Navbar from "./_components/Navbar";
 import {
@@ -280,8 +282,144 @@ export default function NewLeadPage() {
 
   // Photos
   const [photos, setPhotos] = useState<File[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // In-browser camera (mobile only)
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    const checkMobile = () =>
+      setIsMobile(
+        window.innerWidth < 640 ||
+        /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+      );
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  // ── In-browser camera ───────────────────────────────────────────────────
+  // Request camera permission directly from the button action so the browser
+  // can show its native permission dialog.
+  const startCamera = async (
+    mode: "user" | "environment" = "user"
+  ) => {
+    if (photos.length >= 4) return;
+
+    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError(
+        "In-browser camera is not supported here. Please use HTTPS and a supported browser."
+      );
+      setCameraOpen(true);
+      return;
+    }
+
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+
+    setFacingMode(mode);
+    setCameraError(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: mode } },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      setCameraOpen(true);
+
+      requestAnimationFrame(() => {
+        const video = videoRef.current;
+        if (!video || !streamRef.current) return;
+
+        video.srcObject = streamRef.current;
+        video.muted = true;
+        video.playsInline = true;
+        video.play().catch((err) => {
+          console.warn("Camera video playback could not start:", err);
+        });
+      });
+    } catch (error: unknown) {
+      console.error("Camera access error:", error);
+
+      const name =
+        error && typeof error === "object" && "name" in error
+          ? String((error as { name?: unknown }).name)
+          : "";
+
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setCameraError(
+          "Camera permission was denied. Allow camera access in your browser settings, then try again."
+        );
+      } else if (name === "NotFoundError") {
+        setCameraError("No camera was found on this device.");
+      } else if (name === "NotReadableError") {
+        setCameraError(
+          "The camera is already being used by another application."
+        );
+      } else if (name === "SecurityError") {
+        setCameraError(
+          "Camera access was blocked for security reasons. Make sure this page is served over HTTPS."
+        );
+      } else {
+        setCameraError(
+          "Couldn't access the camera. Please check your browser permissions."
+        );
+      }
+
+      setCameraOpen(true);
+    }
+  };
+
+  const openCamera = () => {
+    void startCamera("user");
+  };
+
+  const closeCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+
+    setCameraOpen(false);
+    setCameraError(null);
+  };
+
+  const flipCamera = () => {
+    void startCamera(facingMode === "user" ? "environment" : "user");
+  };
+
+  const capturePhoto = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" });
+        setPhotos((prev) => [...prev, file].slice(0, 4));
+        setSubmitError(null);
+        closeCamera();
+      },
+      "image/jpeg",
+      0.9
+    );
+  };
 
   // ── Fetch executives ────────────────────────────────────────────────────
   const fetchExecs = useCallback(async () => {
@@ -410,6 +548,19 @@ export default function NewLeadPage() {
       setPhotos((prev) => [...prev, ...selectedFiles].slice(0, 4));
       setSubmitError(null);
     }
+  };
+
+  const handleGalleryFromCamera = () => {
+    if (photos.length >= 4) {
+      setSubmitError("You can only upload a maximum of 4 photos.");
+      return;
+    }
+
+    const input = document.getElementById(
+      "photo-gallery-from-camera"
+    ) as HTMLInputElement | null;
+
+    input?.click();
   };
 
   const removePhoto = (index: number) => {
@@ -577,6 +728,7 @@ export default function NewLeadPage() {
         }
         .temp-btn:hover { border-color: rgba(255,255,255,0.16); color: #cbd5e1; }
         .temp-btn.active-hot  { background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.4); color:#f87171; }
+        .temp-btn.active-warm { background:rgba(245,158,11,0.12); border-color:rgba(245,158,11,0.4); color:#fbbf24; }
         .temp-btn.active-cold { background:rgba(59,130,246,0.12); border-color:rgba(59,130,246,0.4); color:#60a5fa; }
 
         [role="dialog"] { background: #0f1218 !important; border-color: rgba(255,255,255,0.08) !important; }
@@ -1364,18 +1516,42 @@ export default function NewLeadPage() {
         <Section icon={ImageIcon} title="Location Photos" subtitle="Section 09" index={9}>
           <div className="space-y-4">
             <FieldLabel>Upload up to 4 photos</FieldLabel>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button
+
+            <div className="flex items-center gap-4">
+              {/* Compact camera control — opens the in-app camera with selfie camera by default */}
+              <button
                 type="button"
-                variant="outline"
-                className="dark-input relative overflow-hidden h-10 px-4"
-                onClick={() => document.getElementById("photo-upload")?.click()}
+                onClick={openCamera}
                 disabled={photos.length >= 4}
+                aria-label="Take a photo"
+                title="Take a photo"
+                className="group flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-500 text-black shadow-lg shadow-amber-500/25 ring-1 ring-amber-300/20 transition-all hover:scale-105 hover:bg-amber-400 active:scale-90 disabled:pointer-events-none disabled:opacity-40"
               >
-                <UploadCloudIcon className="mr-2 h-4 w-4" />
-                {photos.length >= 4 ? "Max Photos Reached" : "Select Photos"}
+                <CameraIcon className="h-6 w-6 transition-transform group-hover:scale-110" />
+              </button>
+
+              <input
+                id="photo-camera-fallback"
+                type="file"
+                accept="image/*"
+                capture="user"
+                className="hidden"
+                onChange={handlePhotoChange}
+                disabled={photos.length >= 4}
+              />
+
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => document.getElementById("photo-gallery")?.click()}
+                  disabled={photos.length >= 4}
+                  className="flex items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-amber-400 disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  Choose from gallery
+                </button>
                 <input
-                  id="photo-upload"
+                  id="photo-gallery"
                   type="file"
                   accept="image/*"
                   multiple
@@ -1383,9 +1559,9 @@ export default function NewLeadPage() {
                   onChange={handlePhotoChange}
                   disabled={photos.length >= 4}
                 />
-              </Button>
-              <div className="flex items-center text-xs text-slate-500">
-                {photos.length}/4 selected
+                <span className="text-[11px] text-slate-600">
+                  {photos.length >= 4 ? "Max photos reached" : `${photos.length}/4 selected`}
+                </span>
               </div>
             </div>
 
@@ -1411,6 +1587,96 @@ export default function NewLeadPage() {
             )}
           </div>
         </Section>
+
+        {/* ── In-browser camera overlay ── */}
+            <input
+            id="photo-gallery-from-camera"
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handlePhotoChange}
+          />
+
+      {cameraOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="relative flex h-[80vh] max-h-[720px] w-full max-w-[520px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-black shadow-2xl">
+            <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 py-4">
+              <button
+                type="button"
+                onClick={closeCamera}
+                aria-label="Close camera"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60"
+              >
+                <XIcon className="h-5 w-5" />
+              </button>
+
+              <span className="rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
+                {facingMode === "user" ? "Front Camera" : "Back Camera"}
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGalleryFromCamera}
+                  aria-label="Choose photos from gallery"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60"
+                >
+                  <ImagePlusIcon className="h-5 w-5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={flipCamera}
+                  aria-label="Switch camera"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60"
+                >
+                  <RefreshCwIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
+              {cameraError ? (
+                <div className="mx-6 max-w-sm rounded-2xl border border-white/10 bg-white/10 p-6 text-center text-sm text-white backdrop-blur-md">
+                  <CameraIcon className="mx-auto mb-3 h-10 w-10 text-amber-400" />
+                  <p>{cameraError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void startCamera(facingMode)}
+                    className="mt-4 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={cn(
+                    "h-full w-full object-cover",
+                    facingMode === "user" && "-scale-x-100"
+                  )}
+                />
+              )}
+            </div>
+
+            <div className="flex shrink-0 items-center justify-center bg-black px-4 py-5">
+              <button
+                type="button"
+                onClick={capturePhoto}
+                disabled={!!cameraError}
+                aria-label="Take photo"
+                className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-white/80 bg-white transition-transform active:scale-95 disabled:opacity-40"
+              >
+                <span className="h-12 w-12 rounded-full border-2 border-black/20" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
           </div>
 
