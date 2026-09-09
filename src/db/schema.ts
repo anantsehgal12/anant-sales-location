@@ -26,6 +26,8 @@ export const callTypeEnum = pgEnum("call_type", [
 
 export const discussionForEnum = pgEnum("discussion_for", [
   "DTH",
+  "Mobile",
+  "Corporate Gifting",
   "Internet Broadband",
   "Internet Leased Line",
   "TollFree Service",
