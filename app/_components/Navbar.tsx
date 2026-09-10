@@ -2,6 +2,7 @@ import { Show, SignInButton, useUser, SignUpButton, UserButton } from "@clerk/ne
 import Link from "next/link";
 import { isAdmin } from "@/lib/isAdmis";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 function Navbar() {
   const {user} = useUser();
@@ -10,7 +11,7 @@ function Navbar() {
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-4 sm:gap-8">
           <Link href="/" className="flex items-center gap-3 sm:gap-5 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tighter text-white">
-           <img src="https://uacqmejpbzojibsrtift.supabase.co/storage/v1/object/sign/logos&all/AS.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8yOWY1YzVhZi04NmVjLTQ4ZmItYjFmOS1mY2NmZTlmODA1MTgiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcyZhbGwvQVMucG5nIiwiaWF0IjoxNzc5NTMxNzgyLCJleHAiOjg4MTc5NDQ1MzgyfQ.JIqeZl_TP89znbzUq0Q_M1WCOMP6fnOEYeS1V3nVXbY" alt="Anant Sales Logo" width={32} height={32} className="rounded-full w-6 h-6 sm:w-8 sm:h-8" />
+           <Image src="/logo.png" alt="Anant Sales Logo" width={32} height={32} className="rounded-full w-6 h-6 sm:w-8 sm:h-8" />
             
             <span className="bg-clip-text font-display text-transparent bg-gradient-to-r from-purple-400 to-blue-500">
               Anant Sales

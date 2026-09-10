@@ -11,6 +11,7 @@ import {
   TargetIcon,
   FlameIcon,
   ArrowRightIcon,
+  ChevronRightIcon,
   CalendarIcon,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -115,11 +116,6 @@ export default function AdminDashboard() {
   return (
     <div className="font-body min-h-screen bg-[#0a0c10] text-slate-200 p-6 sm:p-10">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap');
-        * { box-sizing: border-box; }
-        body { background: #0a0c10; }
-        .font-display { font-family: 'Syne', sans-serif; }
-        .font-body    { font-family: 'DM Sans', sans-serif; }
         @keyframes section-in {
           from { opacity: 0; transform: translateY(16px); }
           to   { opacity: 1; transform: translateY(0); }
@@ -236,7 +232,11 @@ export default function AdminDashboard() {
           ) : (
             <div className="divide-y divide-white/[0.06]">
               {recentLeads.map((row) => (
-                <div key={row.lead.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <Link
+                  key={row.lead.id}
+                  href={`/admin/leads/${row.lead.id}`}
+                  className="-mx-2 flex flex-col gap-2 rounded-lg px-2 py-3 transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between"
+                >
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-slate-200">{row.organisation?.orgName || "Unknown Org"}</p>
@@ -253,8 +253,9 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
                     <CalendarIcon className="h-3 w-3" />
                     {row.lead.visitDate ? format(new Date(row.lead.visitDate), "dd MMM yyyy") : "N/A"}
+                    <ChevronRightIcon className="h-3.5 w-3.5 text-slate-600" />
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

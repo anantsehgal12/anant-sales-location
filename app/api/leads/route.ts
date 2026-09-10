@@ -3,15 +3,22 @@ import { db } from "@/lib/db";
 import { leads, executives, organisations, leadContacts, leadCommercialDetails } from "@/src/db/schema";
 import { ok, created, badRequest, serverError, unauthorized } from "@/lib/api-helpers";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 
 // GET /api/leads?executiveId=xxx&orgId=xxx
-// Returns leads joined with executive + organisation for convenience
+// Returns leads joined with executive + organisation for convenience.
+// Pass BOTH executiveId and orgId to get the lead history for that
+// specific executive + organisation pair (used for the follow-up picker).
+// Pass just one to filter more broadly by executive or by org alone.
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const executiveId = searchParams.get("executiveId");
     const organisationId = searchParams.get("orgId");
+
+    const conditions = [];
+    if (executiveId) conditions.push(eq(leads.executiveId, executiveId));
+    if (organisationId) conditions.push(eq(leads.organisationId, organisationId));
 
     const rows = await db
       .select({
@@ -30,13 +37,7 @@ export async function GET(req: NextRequest) {
       .from(leads)
       .leftJoin(executives, eq(leads.executiveId, executives.id))
       .leftJoin(organisations, eq(leads.organisationId, organisations.id))
-      .where(
-        executiveId
-          ? eq(leads.executiveId, executiveId)
-          : organisationId
-          ? eq(leads.organisationId, organisationId)
-          : undefined
-      )
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(leads.visitDate));
 
     return ok(rows);
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
     const {
       executiveId,
       organisationId,
+      followUpToLeadId,
       visitDate,
       callType,
       locationLat,
@@ -78,11 +80,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // A "Follow-Up" call should reference the earlier call it follows up on
+    if (callType === "Follow-Up" && !followUpToLeadId) {
+      return badRequest("Please select which previous call this follow-up relates to");
+    }
+
     const [row] = await db
       .insert(leads)
       .values({
         executiveId,
         organisationId,
+        followUpToLeadId: callType === "Follow-Up" ? followUpToLeadId : null,
         visitDate,
         callType,
         locationLat,

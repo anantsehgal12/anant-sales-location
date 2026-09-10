@@ -3,20 +3,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { db } from "@/lib/db";
-import { 
-  leads, 
-  executives, 
+import {
+  leads,
+  executives,
   organisations,
   leadContacts,
-  leadCommercialDetails
+  leadCommercialDetails,
 } from "@/src/db/schema";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { 
-  ArrowLeftIcon, 
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
   MapPinIcon,
   BuildingIcon,
   PhoneCallIcon,
@@ -24,7 +25,7 @@ import {
   ImageIcon,
   UsersIcon,
   WifiIcon,
-  ThermometerIcon
+  ThermometerIcon,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -55,8 +56,12 @@ function Section({
           <Icon className="h-4 w-4 text-amber-400" />
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400/70">{subtitle}</p>
-          <h3 className="font-display text-base font-semibold text-white/90">{title}</h3>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400/70">
+            {subtitle}
+          </p>
+          <h3 className="font-display text-base font-semibold text-white/90">
+            {title}
+          </h3>
         </div>
       </div>
       <div className="pl-4">{children}</div>
@@ -72,9 +77,9 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function LeadDetailsPage(
-  props: { params: Promise<{ id: string }> }
-) {
+export default async function LeadDetailsPage(props: {
+  params: Promise<{ id: string }>;
+}) {
   const params = await props.params;
   const leadId = params?.id;
 
@@ -113,14 +118,24 @@ export default async function LeadDetailsPage(
 
   const { lead, executive, organisation } = row;
 
+  // If this call is a follow-up, pull just enough from the earlier lead to
+  // render a "Related To" link back to it.
+  const relatedLead = lead.followUpToLeadId
+    ? await db
+        .select({
+          id: leads.id,
+          visitDate: leads.visitDate,
+          callType: leads.callType,
+        })
+        .from(leads)
+        .where(eq(leads.id, lead.followUpToLeadId))
+        .then((res) => res[0])
+    : null;
+
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap');
-        * { box-sizing: border-box; }
-        body { background: #0a0c10; }
-        .font-display { font-family: 'Syne', sans-serif; }
-        .font-body    { font-family: 'DM Sans', sans-serif; }
+
 
         @keyframes section-in {
           from { opacity: 0; transform: translateY(16px); }
@@ -156,144 +171,382 @@ export default async function LeadDetailsPage(
 
         <div className="relative w-full  mx-auto px-3 sm:px-6 lg:px-10 xl:px-16 pt-10">
           {/* Header */}
-          <div className="mb-8 animate-section" style={{ animationDelay: "0ms" }}>
-            <Button asChild variant="ghost" className="mb-6 sm:-ml-4 text-slate-400 hover:text-white">
+          <div
+            className="mb-8 animate-section"
+            style={{ animationDelay: "0ms" }}
+          >
+            <Button
+              asChild
+              variant="ghost"
+              className="mb-6 sm:-ml-4 text-slate-400 hover:text-white"
+            >
               <Link href="/admin/leads">
                 <ArrowLeftIcon className="h-4 w-4 mr-2" /> Back to Leads
               </Link>
             </Button>
             <div className="mb-2 flex items-center gap-2">
               <span className="pulse-dot h-2 w-2 rounded-full bg-amber-400" />
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-400/80">Submission Data</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-400/80">
+                Submission Data
+              </span>
             </div>
-            <h1 className="font-display text-3xl sm:text-4xl font-extrabold leading-tight text-white">Lead #{lead.id}</h1>
+            <h1 className="font-display text-3xl sm:text-4xl font-extrabold leading-tight text-white">
+              Lead #{lead.id}
+            </h1>
           </div>
 
           <div className="space-y-4">
             {/* ── 1. Executive & Organisation ── */}
-            <Section icon={BuildingIcon} title="Executive & Organisation" subtitle="Section 01" index={1}>
+            <Section
+              icon={BuildingIcon}
+              title="Executive & Organisation"
+              subtitle="Section 01"
+              index={1}
+            >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <FieldLabel>Organisation</FieldLabel>
-                  <Input className="dark-input" value={organisation?.orgName || "Unknown"} readOnly />
+                  <Input
+                    className="dark-input"
+                    value={organisation?.orgName || "Unknown"}
+                    readOnly
+                  />
                 </div>
                 <div>
                   <FieldLabel>Executive</FieldLabel>
-                  <Input className="dark-input" value={executive?.name || "Unknown"} readOnly />
+                  <Input
+                    className="dark-input"
+                    value={executive?.name || "Unknown"}
+                    readOnly
+                  />
                 </div>
               </div>
             </Section>
 
             {/* ── 2. Visit Details ── */}
-            <Section icon={PhoneCallIcon} title="Visit Details" subtitle="Section 02" index={2}>
+            <Section
+              icon={PhoneCallIcon}
+              title="Visit Details"
+              subtitle="Section 02"
+              index={2}
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div><FieldLabel>Visit Date</FieldLabel><Input className="dark-input" value={lead.visitDate ? format(new Date(lead.visitDate), "PPP") : "N/A"} readOnly /></div>
-                <div><FieldLabel>Call Type</FieldLabel><Input className="dark-input" value={lead.callType || "N/A"} readOnly /></div>
-                <div><FieldLabel>Created At</FieldLabel><Input className="dark-input" value={lead.createdAt ? format(new Date(lead.createdAt), "PPP p") : "N/A"} readOnly /></div>
+                <div>
+                  <FieldLabel>Visit Date</FieldLabel>
+                  <Input
+                    className="dark-input"
+                    value={
+                      lead.visitDate
+                        ? format(new Date(lead.visitDate), "PPP")
+                        : "N/A"
+                    }
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Call Type</FieldLabel>
+                  <Input
+                    className="dark-input"
+                    value={lead.callType || "N/A"}
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Created At</FieldLabel>
+                  <Input
+                    className="dark-input"
+                    value={
+                      lead.createdAt
+                        ? format(new Date(lead.createdAt), "PPP p")
+                        : "N/A"
+                    }
+                    readOnly
+                  />
+                </div>
+
+                {lead.followUpToLeadId && (
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <FieldLabel>Related To (Previous Call)</FieldLabel>
+                    {relatedLead ? (
+                      <Link
+                        href={`/admin/leads/${relatedLead.id}`}
+                        className="dark-input flex items-center justify-between rounded-md border px-3.5 py-2.5 text-sm text-amber-300 hover:text-amber-200 hover:bg-white/[0.06] transition-colors"
+                      >
+                        <span>
+                          {format(
+                            new Date(relatedLead.visitDate),
+                            "dd MMM yyyy",
+                          )}{" "}
+                          — {relatedLead.callType}
+                        </span>
+                        <ArrowRightIcon className="h-4 w-4 shrink-0" />
+                      </Link>
+                    ) : (
+                      <Input
+                        className="dark-input"
+                        value="Original call not found (may have been deleted)"
+                        readOnly
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             </Section>
 
             {/* ── 3. Contacts & Discussions ── */}
-            <Section icon={UsersIcon} title="Contacts & Discussions" subtitle="Section 03" index={3}>
+            <Section
+              icon={UsersIcon}
+              title="Contacts & Discussions"
+              subtitle="Section 03"
+              index={3}
+            >
               {contacts && contacts.length > 0 ? (
                 <div className="space-y-4">
                   {contacts.map((contact, i) => (
-                    <div key={i} className="relative rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
+                    <div
+                      key={i}
+                      className="relative rounded-xl border border-white/[0.04] bg-white/[0.01] p-4"
+                    >
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <FieldLabel>Name</FieldLabel>
-                          <Input className="dark-input" value={contact.contactPersonName || "N/A"} readOnly />
+                          <Input
+                            className="dark-input"
+                            value={contact.contactPersonName || "N/A"}
+                            readOnly
+                          />
                         </div>
                         <div>
                           <FieldLabel>Discussion For</FieldLabel>
-                          <Input className="dark-input" value={contact.discussionFor || "N/A"} readOnly />
+                          <Input
+                            className="dark-input"
+                            value={contact.discussionFor || "N/A"}
+                            readOnly
+                          />
                         </div>
                         <div>
                           <FieldLabel>Designation / Dept.</FieldLabel>
-                          <Input className="dark-input" value={contact.contactPersonDesignationDept || "N/A"} readOnly />
+                          <Input
+                            className="dark-input"
+                            value={
+                              contact.contactPersonDesignationDept || "N/A"
+                            }
+                            readOnly
+                          />
                         </div>
                         <div>
                           <FieldLabel>Phone Number</FieldLabel>
-                          <Input className="dark-input" value={contact.contactPersonPhone || "N/A"} readOnly />
+                          <Input
+                            className="dark-input"
+                            value={contact.contactPersonPhone || "N/A"}
+                            readOnly
+                          />
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500 italic">No contacts provided for this lead.</p>
+                <p className="text-sm text-slate-500 italic">
+                  No contacts provided for this lead.
+                </p>
               )}
             </Section>
 
             {/* ── 4. Commercial Details ── */}
-            <Section icon={WifiIcon} title="Commercial Details" subtitle="Section 04" index={4}>
+            <Section
+              icon={WifiIcon}
+              title="Commercial Details"
+              subtitle="Section 04"
+              index={4}
+            >
               {commercials && commercials.length > 0 ? (
                 <div className="space-y-4">
                   {commercials.map((detail, i) => (
-                    <div key={i} className="relative rounded-xl border border-white/[0.04] bg-white/[0.01] p-4">
+                    <div
+                      key={i}
+                      className="relative rounded-xl border border-white/[0.04] bg-white/[0.01] p-4"
+                    >
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div><FieldLabel>Service Type</FieldLabel><Input className="dark-input" value={detail.serviceType || "N/A"} readOnly /></div>
-                        <div><FieldLabel>Current Provider</FieldLabel><Input className="dark-input" value={detail.currentProvider || "N/A"} readOnly /></div>
-                        <div><FieldLabel>No. of Connections</FieldLabel><Input className="dark-input" value={detail.noOfConnections || "N/A"} readOnly /></div>
-                        <div><FieldLabel>Current Plan</FieldLabel><Input className="dark-input" value={detail.currentRentalPlan || "N/A"} readOnly /></div>
-                        <div><FieldLabel>Monthly Spend (₹)</FieldLabel><Input className="dark-input" value={detail.totalMonthlyExpenses || "N/A"} readOnly /></div>
+                        <div>
+                          <FieldLabel>Service Type</FieldLabel>
+                          <Input
+                            className="dark-input"
+                            value={detail.serviceType || "N/A"}
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Current Provider</FieldLabel>
+                          <Input
+                            className="dark-input"
+                            value={detail.currentProvider || "N/A"}
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>No. of Connections</FieldLabel>
+                          <Input
+                            className="dark-input"
+                            value={detail.noOfConnections || "N/A"}
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Current Plan</FieldLabel>
+                          <Input
+                            className="dark-input"
+                            value={detail.currentRentalPlan || "N/A"}
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Monthly Spend (₹)</FieldLabel>
+                          <Input
+                            className="dark-input"
+                            value={detail.totalMonthlyExpenses || "N/A"}
+                            readOnly
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500 italic">No commercial details provided for this lead.</p>
+                <p className="text-sm text-slate-500 italic">
+                  No commercial details provided for this lead.
+                </p>
               )}
             </Section>
 
             {/* ── 5. Call Outcome ── */}
-            <Section icon={ThermometerIcon} title="Call Outcome" subtitle="Section 05" index={5}>
+            <Section
+              icon={ThermometerIcon}
+              title="Call Outcome"
+              subtitle="Section 05"
+              index={5}
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div><FieldLabel>Call Temperature</FieldLabel><Input className="dark-input" value={lead.callTemperature || "N/A"} readOnly /></div>
-                <div><FieldLabel>Next Follow-up Date</FieldLabel><Input className="dark-input" value={lead.nextFollowUpDate ? format(new Date(lead.nextFollowUpDate), "PPP") : "None"} readOnly /></div>
-                <div><FieldLabel>Updated At</FieldLabel><Input className="dark-input" value={lead.updatedAt ? format(new Date(lead.updatedAt), "PPP p") : "N/A"} readOnly /></div>
+                <div>
+                  <FieldLabel>Call Temperature</FieldLabel>
+                  <Input
+                    className="dark-input"
+                    value={lead.callTemperature || "N/A"}
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Next Follow-up Date</FieldLabel>
+                  <Input
+                    className="dark-input"
+                    value={
+                      lead.nextFollowUpDate
+                        ? format(new Date(lead.nextFollowUpDate), "PPP")
+                        : "None"
+                    }
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Updated At</FieldLabel>
+                  <Input
+                    className="dark-input"
+                    value={
+                      lead.updatedAt
+                        ? format(new Date(lead.updatedAt), "PPP p")
+                        : "N/A"
+                    }
+                    readOnly
+                  />
+                </div>
               </div>
             </Section>
 
             {/* ── 6. Location ── */}
-            <Section icon={MapPinIcon} title="Location Details" subtitle="Section 06" index={6}>
+            <Section
+              icon={MapPinIcon}
+              title="Location Details"
+              subtitle="Section 06"
+              index={6}
+            >
               {lead.locationLat && lead.locationLng ? (
                 <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
                   <div className="flex-1">
                     <FieldLabel>Coordinates (Lat, Lng)</FieldLabel>
-                    <Input className="dark-input font-mono text-sm" value={`${lead.locationLat}, ${lead.locationLng}`} readOnly />
+                    <Input
+                      className="dark-input font-mono text-sm"
+                      value={`${lead.locationLat}, ${lead.locationLng}`}
+                      readOnly
+                    />
                   </div>
-                  <Button variant="outline" asChild className="dark-input h-10 shrink-0 hover:bg-white/[0.04]">
-                    <a href={`https://www.google.com/maps/search/?api=1&query=${lead.locationLat},${lead.locationLng}`} target="_blank" rel="noreferrer" title="View on Google Maps">
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="dark-input h-10 shrink-0 hover:bg-white/[0.04]"
+                  >
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${lead.locationLat},${lead.locationLng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="View on Google Maps"
+                    >
                       <MapPinIcon className="h-4 w-4 mr-2" /> View on Maps
                     </a>
                   </Button>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500 italic">No GPS coordinates captured for this lead.</p>
+                <p className="text-sm text-slate-500 italic">
+                  No GPS coordinates captured for this lead.
+                </p>
               )}
             </Section>
 
             {/* ── 7. Remarks ── */}
-            <Section icon={StickyNoteIcon} title="Final Remarks" subtitle="Section 07" index={7}>
+            <Section
+              icon={StickyNoteIcon}
+              title="Final Remarks"
+              subtitle="Section 07"
+              index={7}
+            >
               <div>
                 <FieldLabel>Notes & Observations</FieldLabel>
-                <Textarea className="dark-input min-h-[100px] resize-none" value={lead.finalRemarks || "No remarks provided."} readOnly />
+                <Textarea
+                  className="dark-input min-h-[100px] resize-none"
+                  value={lead.finalRemarks || "No remarks provided."}
+                  readOnly
+                />
               </div>
             </Section>
 
             {/* ── 8. Photos ── */}
-            {lead.photoUrls && Array.isArray(lead.photoUrls) && lead.photoUrls.length > 0 && (
-              <Section icon={ImageIcon} title="Location Photos" subtitle="Section 08" index={8}>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  {(lead.photoUrls as string[]).map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noreferrer" className="block aspect-square rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.02]">
-                      <img src={url} alt={`Lead photo ${i + 1}`} className="object-cover w-full h-full hover:opacity-80 transition-opacity duration-300" />
-                    </a>
-                  ))}
-                </div>
-              </Section>
-            )}
+            {lead.photoUrls &&
+              Array.isArray(lead.photoUrls) &&
+              lead.photoUrls.length > 0 && (
+                <Section
+                  icon={ImageIcon}
+                  title="Location Photos"
+                  subtitle="Section 08"
+                  index={8}
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {(lead.photoUrls as string[]).map((url, i) => (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block aspect-square rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.02]"
+                      >
+                        <img
+                          src={url}
+                          alt={`Lead photo ${i + 1}`}
+                          className="object-cover w-full h-full hover:opacity-80 transition-opacity duration-300"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </Section>
+              )}
           </div>
         </div>
       </div>

@@ -101,6 +101,12 @@ export const leads = pgTable("leads", {
     .notNull()
     .references(() => organisations.id, { onDelete: "restrict" }),
 
+  // Self-reference: when callType is "Follow-Up", this points at the
+  // earlier lead/call (for the same org + executive) that is being followed up on.
+  followUpToLeadId: uuid("follow_up_to_lead_id").references((): any => leads.id, {
+    onDelete: "set null",
+  }),
+
   // ── Visit details ─────────────────────────
   visitDate: date("visit_date").notNull(),
   callType: callTypeEnum("call_type").notNull(),
@@ -178,6 +184,16 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
   }),
   contacts: many(leadContacts),
   commercialDetails: many(leadCommercialDetails),
+  // The earlier lead this one is following up on
+  followUpToLead: one(leads, {
+    fields: [leads.followUpToLeadId],
+    references: [leads.id],
+    relationName: "leadFollowUps",
+  }),
+  // Later leads that followed up on this one
+  followUpLeads: many(leads, {
+    relationName: "leadFollowUps",
+  }),
 }));
 
 export const leadContactsRelations = relations(leadContacts, ({ one }) => ({

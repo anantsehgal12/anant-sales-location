@@ -93,11 +93,7 @@ export default function AdminExecutives() {
     return (
       <div className="font-body min-h-screen bg-[#0a0c10] text-slate-200 p-6 sm:p-10">
         <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap');
-        * { box-sizing: border-box; }
-        body { background: #0a0c10; }
-        .font-display { font-family: 'Syne', sans-serif; }
-        .font-body    { font-family: 'DM Sans', sans-serif; }
+        
         .dark-input {
           background: rgba(255,255,255,0.04) !important;
           border-color: rgba(255,255,255,0.08) !important;

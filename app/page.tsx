@@ -63,6 +63,8 @@ import {
   XIcon,
   CameraIcon,
   ImagePlusIcon,
+  TargetIcon,
+  HistoryIcon,
 } from "lucide-react";
 import Navbar from "./_components/Navbar";
 import {
@@ -72,12 +74,6 @@ import {
   serviceProviderEnum,
   orgSegmentEnum,
 } from "@/src/db/schema";
-import { createClient } from "@supabase/supabase-js";
-
-// Initialize Supabase client for storage
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -123,6 +119,7 @@ interface LeadForm {
   organisationId: string;
   visitDate: Date | undefined;
   callType: CallType | "";
+  followUpToLeadId: string;
   locationLat: number | null;
   locationLng: number | null;
   contacts: ContactForm[];
@@ -131,6 +128,30 @@ interface LeadForm {
   nextFollowUpDate: Date | undefined;
   finalRemarks: string;
   photoUrls: string[];
+}
+
+// A previous lead/call for the same executive + org, shown in the
+// follow-up picker
+interface PreviousLead {
+  id: string;
+  visitDate: string;
+  callType: CallType;
+  callTemperature: CallTemperature | null;
+  finalRemarks: string | null;
+}
+
+// A lead row as returned by GET /api/leads, used for the "Recent Visits"
+// panel — same shape the admin Leads Log fetches and renders.
+interface RecentLead {
+  lead: {
+    id: string;
+    visitDate: string;
+    callType: CallType;
+    callTemperature: CallTemperature | null;
+    finalRemarks: string | null;
+  };
+  executive: { name: string } | null;
+  organisation: { orgName: string } | null;
 }
 
 interface NewExecForm {
@@ -151,6 +172,7 @@ const EMPTY_LEAD: LeadForm = {
   organisationId: "",
   visitDate: new Date(),
   callType: "",
+  followUpToLeadId: "",
   locationLat: null,
   locationLng: null,
   contacts: [
@@ -453,6 +475,180 @@ export default function NewLeadPage() {
 
   useEffect(() => { fetchOrgs(); }, [fetchOrgs]);
 
+  // ── Previous calls (for the Follow-Up picker + auto-fill) ───────────────
+  // Pulled whenever both executive + organisation are selected — used to
+  // (a) power the Follow-Up picker, and (b) auto-detect existing history so
+  // we can auto-select "Follow-Up" and prefill the form below.
+  const [previousLeads, setPreviousLeads] = useState<PreviousLead[]>([]);
+  const [previousLeadsLoading, setPreviousLeadsLoading] = useState(false);
+  const [previousLeadsError, setPreviousLeadsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!form.executiveId || !form.organisationId) {
+      setPreviousLeads([]);
+      setPreviousLeadsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchPreviousLeads = async () => {
+      setPreviousLeadsLoading(true);
+      setPreviousLeadsError(null);
+      try {
+        const res = await fetch(
+          `/api/leads?executiveId=${form.executiveId}&orgId=${form.organisationId}`
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success) {
+          // API already orders by visitDate desc, so index 0 = latest
+          const options: PreviousLead[] = (json.data ?? []).map((row: any) => ({
+            id: row.lead.id,
+            visitDate: row.lead.visitDate,
+            callType: row.lead.callType,
+            callTemperature: row.lead.callTemperature,
+            finalRemarks: row.lead.finalRemarks,
+          }));
+          setPreviousLeads(options);
+        } else {
+          setPreviousLeadsError(json.error || "Could not load previous calls.");
+        }
+      } catch {
+        if (!cancelled) setPreviousLeadsError("Could not load previous calls.");
+      } finally {
+        if (!cancelled) setPreviousLeadsLoading(false);
+      }
+    };
+
+    fetchPreviousLeads();
+    return () => { cancelled = true; };
+  }, [form.executiveId, form.organisationId]);
+
+  // ── Auto-select Follow-Up + prefill from the latest previous lead ───────
+  // As soon as we know this executive + organisation pair has history, jump
+  // straight to "Follow-Up", link it to the latest call, and carry over that
+  // call's contacts / commercial details / remarks / follow-up date /
+  // location — everything except photos and call temperature, which should
+  // always be fresh for the new visit. Runs once per exec+org pair so it
+  // doesn't keep clobbering edits the user makes afterwards.
+  const autoFilledPairRef = useRef<string | null>(null);
+  const [autoFilling, setAutoFilling] = useState(false);
+  const [autoFillNotice, setAutoFillNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const pairKey = form.executiveId && form.organisationId ? `${form.executiveId}|${form.organisationId}` : null;
+
+    if (!pairKey) {
+      autoFilledPairRef.current = null;
+      setAutoFillNotice(null);
+      return;
+    }
+
+    if (previousLeadsLoading) return;
+    if (previousLeads.length === 0) return;
+    if (autoFilledPairRef.current === pairKey) return;
+
+    autoFilledPairRef.current = pairKey;
+    const latest = previousLeads[0];
+
+    const applyAutoFill = async () => {
+      setAutoFilling(true);
+      try {
+        const res = await fetch(`/api/leads/${latest.id}`);
+        const json = await res.json();
+        if (!json.success) return;
+
+        const prevLead = json.data.lead;
+        const prevContacts = prevLead.contacts ?? [];
+        const prevCommercials = prevLead.commercialDetails ?? [];
+
+        setForm((prev) => ({
+          ...prev,
+          callType: "Follow-Up",
+          followUpToLeadId: latest.id,
+          contacts: prevContacts.length > 0
+            ? prevContacts.map((c: any) => ({
+                contactPersonName: c.contactPersonName || "",
+                contactPersonDesignationDept: c.contactPersonDesignationDept || "",
+                contactPersonPhone: c.contactPersonPhone || "",
+                discussionFor: c.discussionFor || "",
+              }))
+            : prev.contacts,
+          commercialDetails: prevCommercials.length > 0
+            ? prevCommercials.map((cd: any) => ({
+                serviceType: cd.serviceType || "",
+                currentProvider: cd.currentProvider || "",
+                noOfConnections: cd.noOfConnections != null ? String(cd.noOfConnections) : "",
+                currentRentalPlan: cd.currentRentalPlan || "",
+                totalMonthlyExpenses: cd.totalMonthlyExpenses != null ? String(cd.totalMonthlyExpenses) : "",
+              }))
+            : prev.commercialDetails,
+          nextFollowUpDate: prevLead.nextFollowUpDate ? new Date(prevLead.nextFollowUpDate) : prev.nextFollowUpDate,
+          locationLat: prevLead.locationLat ?? prev.locationLat,
+          locationLng: prevLead.locationLng ?? prev.locationLng,
+          // Deliberately left untouched: callTemperature, photoUrls, finalRemarks
+        }));
+        setAutoFillNotice(
+          `Prefilled from your last visit on ${format(new Date(latest.visitDate), "dd MMM yyyy")} — review before submitting.`
+        );
+      } catch {
+        // silently fail — user can still fill the form manually
+      } finally {
+        setAutoFilling(false);
+      }
+    };
+
+    applyAutoFill();
+  }, [form.executiveId, form.organisationId, previousLeads, previousLeadsLoading]);
+
+  // ── Recent Visits panel ─────────────────────────────────────────────────
+  // Design mirrors the admin Leads Log list (same row layout, badges, and
+  // colours) so the capture form gives the executive a quick glance at
+  // their own recent visits — read-only, no filters/export/delete here.
+  const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
+  const [recentLeadsLoading, setRecentLeadsLoading] = useState(false);
+  const [recentLeadsError, setRecentLeadsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!form.executiveId) {
+      setRecentLeads([]);
+      setRecentLeadsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchRecentLeads = async () => {
+      setRecentLeadsLoading(true);
+      setRecentLeadsError(null);
+      try {
+        const res = await fetch(`/api/leads?executiveId=${form.executiveId}`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success) {
+          setRecentLeads((json.data ?? []).slice(0, 1));
+        } else {
+          setRecentLeadsError(json.error || "Could not load recent visits.");
+        }
+      } catch {
+        if (!cancelled) setRecentLeadsError("Could not load recent visits.");
+      } finally {
+        if (!cancelled) setRecentLeadsLoading(false);
+      }
+    };
+
+    fetchRecentLeads();
+    return () => { cancelled = true; };
+  }, [form.executiveId]);
+
+  // Reset the linked call whenever the call type, executive, or org changes
+  // so a stale reference from a previous selection can't be submitted.
+  useEffect(() => {
+    if (form.callType !== "Follow-Up") {
+      if (form.followUpToLeadId) set("followUpToLeadId", "");
+      setAutoFillNotice(null);
+    }
+  }, [form.callType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const set = <K extends keyof LeadForm>(key: K, value: LeadForm[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -574,6 +770,11 @@ export default function NewLeadPage() {
       return;
     }
 
+    if (form.callType === "Follow-Up" && !form.followUpToLeadId) {
+      setSubmitError("Please select which previous call this follow-up relates to.");
+      return;
+    }
+
     const hasInvalidContact = form.contacts.some(c => !c.contactPersonName.trim() || !c.discussionFor);
     if (hasInvalidContact) {
       setSubmitError("Please provide a name and discussion topic for all contacts.");
@@ -592,27 +793,34 @@ export default function NewLeadPage() {
       let uploadedUrls: string[] = [];
 
       if (photos.length > 0) {
-        if (!supabase) {
-          throw new Error("Supabase is not configured. Please check your environment variables.");
-        }
         for (const photo of photos) {
           const fileExt = photo.name.split(".").pop();
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
 
-          const { data, error } = await supabase.storage
-            .from("client-locations")
-            .upload(fileName, photo, { cacheControl: "3600", upsert: false });
-
-          if (error) {
-            console.error("Supabase Storage Error details:", error, "URL configured:", supabaseUrl);
-            throw new Error(`Upload failed for ${photo.name}: ${error.message}`);
+          // 1. Ask our API for a presigned R2 upload URL
+          const presignRes = await fetch("/api/leads/photo-upload-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName, contentType: photo.type || "application/octet-stream" }),
+          });
+          const presignJson = await presignRes.json();
+          if (!presignRes.ok || !presignJson.uploadUrl) {
+            throw new Error(presignJson.error || `Could not get an upload URL for ${photo.name}`);
           }
 
-          const { data: urlData } = supabase.storage
-            .from("client-locations")
-            .getPublicUrl(fileName);
+          // 2. Upload the file straight to R2 using the presigned URL
+          const putRes = await fetch(presignJson.uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": photo.type || "application/octet-stream" },
+            body: photo,
+          });
 
-          uploadedUrls.push(urlData.publicUrl);
+          if (!putRes.ok) {
+            console.error("R2 Storage Error:", putRes.status, putRes.statusText);
+            throw new Error(`Upload failed for ${photo.name}: ${putRes.statusText}`);
+          }
+
+          uploadedUrls.push(presignJson.publicUrl);
         }
       }
 
@@ -669,12 +877,6 @@ export default function NewLeadPage() {
     <>
       <Navbar />
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap');
-        * { box-sizing: border-box; }
-        body { background: #0a0c10; }
-        .font-display { font-family: 'Syne', sans-serif; }
-        .font-body    { font-family: 'DM Sans', sans-serif; }
-
         @keyframes section-in {
           from { opacity: 0; transform: translateY(16px); }
           to   { opacity: 1; transform: translateY(0); }
@@ -1016,6 +1218,67 @@ export default function NewLeadPage() {
               </div>
             </Section>
 
+            {/* ── Recent Visits (design mirrors admin Leads Log) ── */}
+            {form.executiveId && (
+              <div className="animate-slide-down rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm overflow-hidden">
+                <div className="flex items-center gap-3 px-5 pt-5 pb-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20">
+                    <HistoryIcon className="h-4 w-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400/70">Quick Glance</p>
+                    <h3 className="font-display text-base font-semibold text-white/90">Last Visit</h3>
+                  </div>
+                </div>
+
+                {recentLeadsLoading ? (
+                  <div className="p-8 flex justify-center text-amber-500">
+                    <LoaderCircleIcon className="animate-spin h-6 w-6" />
+                  </div>
+                ) : recentLeadsError ? (
+                  <p className="px-5 pb-5 text-xs text-red-400">{recentLeadsError}</p>
+                ) : recentLeads.length === 0 ? (
+                  <p className="px-5 pb-5 text-sm text-slate-500">No visits logged yet for this executive.</p>
+                ) : (
+                  <div className="divide-y divide-white/[0.06]">
+                    {recentLeads.map((row) => (
+                      <div
+                        key={row.lead.id}
+                        className="flex items-start gap-4 px-5 py-4 hover:bg-white/[0.02] transition-colors"
+                      >
+                        <div className="flex mt-1 h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                          <TargetIcon className="h-5 w-5 text-emerald-400" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-white text-sm sm:text-base">
+                              {row.organisation?.orgName || "Unknown Org"}
+                            </p>
+                            {row.lead.callTemperature && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/[0.1] bg-white/[0.05] text-slate-300">
+                                {row.lead.callTemperature.startsWith("Hot")
+                                  ? "🔥 Hot"
+                                  : row.lead.callTemperature.startsWith("Warm")
+                                  ? "🌤️ Warm"
+                                  : "🧊 Cold"}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-amber-400 mt-0.5">{row.lead.callType}</p>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
+                            <span className="flex items-center gap-1.5">
+                              <CalendarIcon className="h-3 w-3" />{" "}
+                              {format(new Date(row.lead.visitDate), "dd MMM yyyy")}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── 2. Organisation ── */}
             <Section icon={BuildingIcon} title="Organisation" subtitle="Section 02" index={2}>
               <div className="space-y-4">
@@ -1147,6 +1410,21 @@ export default function NewLeadPage() {
 
             {/* ── 3. Visit Details ── */}
             <Section icon={PhoneCallIcon} title="Visit Details" subtitle="Section 03" index={3}>
+              {(autoFilling || autoFillNotice) && (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3.5 py-2.5 text-xs text-amber-300 animate-slide-down">
+                  {autoFilling ? (
+                    <>
+                      <LoaderCircleIcon className="h-3.5 w-3.5 shrink-0 animate-spin mt-0.5" />
+                      Checking for previous visits and prefilling the form…
+                    </>
+                  ) : (
+                    <>
+                      <HistoryIcon className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      {autoFillNotice}
+                    </>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <FieldLabel required>Visit Date</FieldLabel>
@@ -1179,6 +1457,70 @@ export default function NewLeadPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {form.callType === "Follow-Up" && (
+                  <div className="sm:col-span-2 animate-slide-down">
+                    <FieldLabel required>Related To (Previous Call)</FieldLabel>
+                    {!form.executiveId || !form.organisationId ? (
+                      <p className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-xs text-slate-500">
+                        Select an executive and organisation above to see their call history.
+                      </p>
+                    ) : previousLeadsLoading ? (
+                      <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-xs text-slate-500">
+                        <LoaderCircleIcon className="h-3.5 w-3.5 animate-spin" />
+                        Loading previous calls…
+                      </div>
+                    ) : previousLeadsError ? (
+                      <p className="text-xs text-red-400">{previousLeadsError}</p>
+                    ) : previousLeads.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-xs text-slate-500">
+                        No previous calls found for this executive + organisation.
+                      </p>
+                    ) : (
+                      <Select
+                        value={form.followUpToLeadId}
+                        onValueChange={(v) => set("followUpToLeadId", v)}
+                      >
+                        <SelectTrigger className="dark-input w-full">
+                          <SelectValue placeholder="Select the call this follows up on…" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#131720] border-white/[0.08] text-slate-200">
+                          {previousLeads.map((pl) => (
+                            <SelectItem key={pl.id} value={pl.id}>
+                              <div className="flex items-center gap-2.5 py-0.5">
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                                  <TargetIcon className="h-3 w-3 text-emerald-400" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-medium text-slate-200">
+                                      {format(new Date(pl.visitDate), "dd MMM yyyy")}
+                                    </span>
+                                    <span className="text-amber-400 text-xs">· {pl.callType}</span>
+                                    {pl.callTemperature && (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded-full border border-white/[0.1] bg-white/[0.05] text-slate-300 shrink-0">
+                                        {pl.callTemperature.startsWith("Hot")
+                                          ? "🔥 Hot"
+                                          : pl.callTemperature.startsWith("Warm")
+                                          ? "🌤️ Warm"
+                                          : "🧊 Cold"}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {pl.finalRemarks && (
+                                    <p className="text-[11px] text-slate-500 truncate max-w-[220px]">
+                                      {pl.finalRemarks.slice(0, 50)}{pl.finalRemarks.length > 50 ? "…" : ""}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                )}
               </div>
             </Section>
 

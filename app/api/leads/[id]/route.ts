@@ -56,6 +56,21 @@ export async function GET(_req: NextRequest, props: Params) {
 
     (row.lead as any).commercialDetails = commercialDetails;
 
+    // If this lead is itself a follow-up, include a light reference to the
+    // earlier lead it relates to (id + visitDate + callType only)
+    if (row.lead.followUpToLeadId) {
+      const [prev] = await db
+        .select({
+          id: leads.id,
+          visitDate: leads.visitDate,
+          callType: leads.callType,
+        })
+        .from(leads)
+        .where(eq(leads.id, row.lead.followUpToLeadId));
+
+      (row.lead as any).followUpToLead = prev || null;
+    }
+
     return ok(row);
   } catch (e) {
     return serverError(e);
@@ -80,6 +95,7 @@ export async function PATCH(req: NextRequest, props: Params) {
       "finalRemarks",
       "executiveId",
       "organisationId",
+      "followUpToLeadId",
     ] as const;
 
     for (const key of allowed) {
@@ -88,6 +104,11 @@ export async function PATCH(req: NextRequest, props: Params) {
 
     if (Object.keys(updateData).length === 0) {
       return badRequest("Provide at least one field to update");
+    }
+
+    // Clear the follow-up reference if the call type is changed away from Follow-Up
+    if (updateData.callType && updateData.callType !== "Follow-Up") {
+      updateData.followUpToLeadId = null;
     }
 
     updateData.updatedAt = new Date();
